@@ -3,6 +3,7 @@ package pw
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -62,7 +63,13 @@ func GetPwHash(plainPw string) string {
 func GetPwnedCount(pwHash string) (int64, error) {
 	// 2A... => [42, ....]
 	// 42 is the partitionID.
-	decodedBytes, _ := hex.DecodeString(pwHash)
+	if len(pwHash) != len("8A79FF89C7DBD4655D22C2CE58970514") {
+		return -1, errors.New("input hash is invalid")
+	}
+	decodedBytes, err := hex.DecodeString(pwHash)
+	if err != nil {
+		return -1, err
+	}
 	partitionID := int32(decodedBytes[0])
 	rows, err := query(
 		pwHashQuery,
