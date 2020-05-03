@@ -18,12 +18,7 @@ import (
 )
 
 var proj string = ""
-
-const pwHashQuery = `
-	SELECT * 
-	FROM ` + "`booming-client-211100.hibp.pw_hashes`" + `
-	WHERE pw_hash = @pw_hash AND ` + "`partition`" + ` = @partition
-	LIMIT 1`
+var pwHashQuery string = ""
 
 // Struct representing schema of pw_hashes table.
 type pwHashRow struct {
@@ -36,12 +31,19 @@ type pwHashRow struct {
 }
 
 // Init initializes the module.
-func Init() {
+func InitGCP() {
 	proj = os.Getenv("GOOGLE_CLOUD_PROJECT")
 	if proj == "" {
 		fmt.Println("GOOGLE_CLOUD_PROJECT environment variable must be set.")
 		os.Exit(1)
 	}
+	tableName := fmt.Sprintf("`%v.hibp.pw_hashes`", proj)
+	pwHashQuery = `
+		SELECT * 
+		FROM ` + tableName + `
+		WHERE pw_hash = @pw_hash AND ` + "`partition`" + ` = @partition
+		LIMIT 1`
+
 }
 
 // GetPwHash converts plain text password to `md4(utf16le.encode(plain))`.

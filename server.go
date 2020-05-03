@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/dotslash/misc_go_server/pw"
+	"github.com/dotslash/miscgo/pw"
 	"github.com/gorilla/mux"
 )
 
@@ -72,8 +72,8 @@ func main() {
 		"Servers use_haveibeenpwned_com_instead only on https")
 	flag.Parse()
 
-	// Init pw module.
-	pw.Init()
+	// Init gcp in pw module.
+	pw.InitGCP()
 
 	// Routers.
 	r := mux.NewRouter()
