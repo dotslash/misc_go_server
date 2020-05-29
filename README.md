@@ -1,7 +1,7 @@
 # Miscellaneous utils written in go.
 
 ## Have I been pwned?
-I have utils based on the data shared by hibp.com.
+I built the following utils based on the data shared by hibp.com.
 
 #### Using `pw/cli/main.go`: 
 
