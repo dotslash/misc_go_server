@@ -8,13 +8,14 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
+
 	// We will compare our implementation with this library's
 	"github.com/gokyle/hotp"
 	// gozxing.qrcode does not have a nice way to create an qr code from text
 	"github.com/makiuchi-d/gozxing"
 	"github.com/makiuchi-d/gozxing/qrcode"
+
 	// skip2/go-qrcode only supports encoding text to qr.
-	qrcode2 "github.com/skip2/go-qrcode"
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
@@ -24,6 +25,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	qrcode2 "github.com/skip2/go-qrcode"
 )
 
 var debugMode = flag.Bool("debug", false, "Enable debug mode")
@@ -32,6 +35,12 @@ var printTiming = flag.Bool("print_timing", false, "Print timing")
 func panicOnErr(err error) {
 	if err != nil {
 		panic(err)
+	}
+}
+
+func logIf(cond bool, s string) {
+	if cond {
+		fmt.Println(s)
 	}
 }
 
@@ -88,9 +97,7 @@ func (totp *TOTP) secretBytes() []byte {
 
 func (totp *TOTP) timeSeqBytes() []byte {
 	timeSeq := uint64(time.Now().Unix() / 30)
-	if *debugMode {
-		fmt.Printf("time Seq: %v\n", timeSeq)
-	}
+	logIf(*debugMode, fmt.Sprintf("time Seq: %v\n", timeSeq))
 	ret := make([]byte, 8)
 	binary.BigEndian.PutUint64(ret, timeSeq)
 	return ret
@@ -144,13 +151,17 @@ func TOTPFromURL(urlstring string) TOTP {
 	panicIf(u.Scheme != "otpauth" && u.Host != "totp",
 		fmt.Sprintf("wrong scheme/host: %v", u))
 
-	digits, err := strconv.Atoi(u.Query().Get("digits"))
-	panicIf(digits > 8, "digits should be <= 8")
-	panicOnErr(err)
+	digits := 6
+	digitsStr := u.Query().Get("digits")
+	if digitsStr != "" {
+		digits, err = strconv.Atoi(digitsStr)
+		panicIf(digits > 8, fmt.Sprintf("digits should be <= 8 :%v", digitsStr))
+		panicOnErr(err)
+	}
 	return TOTP{
 		issuer: u.Query().Get("issuer"),
 		digits: digits,
-		secret: u.Query().Get("secret"),
+		secret: strings.ToUpper(u.Query().Get("secret")),
 		note:   strings.TrimLeft(u.Path, "/"),
 	}
 }
@@ -184,15 +195,13 @@ func testCreateTOTPTask() {
 	fmt.Printf("GokyleOTP : %v %v\n", totp1.GokyleOTP(), totp2.GokyleOTP())
 }
 
-func getOTPTask(qrPath, otpUrl string) {
-	panicIf(qrPath == "" && otpUrl == "", "Either otp_qr_path or otp_url must be set")
+func getOTPTask(qrPath, otpURL string) {
+	panicIf(qrPath == "" && otpURL == "", "Either otp_qr_path or otp_url must be set")
 	if qrPath != "" {
-		otpUrl = qrToText(qrPath)
+		otpURL = qrToText(qrPath)
 	}
-	totp := TOTPFromURL(otpUrl)
-	if *debugMode {
-		fmt.Printf("URL: %v\n", totp.URL())
-	}
+	totp := TOTPFromURL(otpURL)
+	logIf(*debugMode, fmt.Sprintf("URL: %v\n", totp.URL()))
 	fmt.Println(totp.OTP())
 }
 
@@ -214,6 +223,10 @@ func createTOTPTask(qrPath, issuer, user string, digits int) {
 }
 
 func main() {
+	smartArg := flag.String(
+		"s", "", "Smartly figure out which task to run. This will override all other options. "+
+			"If the arg looks like an image path, then assumes it's a QR image otp task. "+
+			"If the arg looks like an otp URL, then assumes it's a OTP url image task.")
 	task := flag.String("task", "test", "Pick one of {test,create,otp}")
 	createQrPath := flag.String(
 		"create_qr_path", "",
@@ -230,16 +243,35 @@ func main() {
 	otpQrLocation := flag.String(
 		"otp_qr_path", "",
 		"Path of the QR code for otp task. For otp task either this or otp_url should be passed")
-	otpUrl := flag.String(
+	otpURL := flag.String(
 		"otp_url", "",
 		"TOTP URL for otp task. For otp task either this or otp_qr_path should be specified")
 
 	flag.Parse()
+
+	if *smartArg != "" {
+		*task = "otp"
+		smartArgNorm := strings.ToLower(*smartArg)
+		if strings.HasSuffix(smartArgNorm, ".png") ||
+			strings.HasSuffix(smartArgNorm, ".jpg") ||
+			strings.HasSuffix(smartArgNorm, ".jpeg") {
+			*otpQrLocation = *smartArg
+			*otpURL = ""
+			logIf(*debugMode, fmt.Sprintf("Interpreted smart arg as qr path: %v", *smartArg))
+		} else if strings.HasPrefix(smartArgNorm, "otpauth") {
+			*otpQrLocation = ""
+			*otpURL = *smartArg
+			logIf(*debugMode, fmt.Sprintf("Interpreted smart arg as otp url: %v", *smartArg))
+		} else {
+			panic("Failed to understand smart arg: " + *smartArg)
+		}
+	}
+
 	switch *task {
 	case "test":
 		testCreateTOTPTask()
 	case "otp":
-		getOTPTask(*otpQrLocation, *otpUrl)
+		getOTPTask(*otpQrLocation, *otpURL)
 	case "create":
 		createTOTPTask(*createQrPath, *createIssuer, *createUser, *createDigits)
 	default:
